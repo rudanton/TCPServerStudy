@@ -38,7 +38,18 @@ public class Server : MonoBehaviour
             Chat.instance.ShowMessage($"Socket error: {e.Message}");
         }
 	}
-
+    public void ServerRelease()
+    {
+        Broadcast($"서버 연결이 끊어졌습니다", clients);
+        for(int i = 0 ;i<clients.Count;i++)
+        {
+            clients[i].tcp.Close();
+        }
+        clients.Clear();
+        disconnectList.Clear();
+        server.Stop();
+        serverStarted = false;
+    }
 	void Update()
 	{
         if (!serverStarted) return;
@@ -53,14 +64,20 @@ public class Server : MonoBehaviour
                 continue;
             }
             // 클라이언트로부터 체크 메시지를 받는다
-            else 
+            else
             {
                 NetworkStream s = c.tcp.GetStream();
-                if (s.DataAvailable) 
+                if (s.DataAvailable)
                 {
                     string data = new StreamReader(s, true).ReadLine();
+                    
                     if (data != null)
+                    {
                         OnIncomingData(c, data);
+                    }
+
+
+
                 }
             }
         }
@@ -114,6 +131,7 @@ public class Server : MonoBehaviour
 
     void OnIncomingData(ServerClient c, string data)
     {
+        if(!data.Contains("position"))Debug.Log(data);
         if (data.Contains("&NAME")) 
         {
             c.clientName = data.Split('|')[1];

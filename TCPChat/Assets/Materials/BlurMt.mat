@@ -20,7 +20,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs: []
     m_Floats:
-    - _Black: 0.33
+    - _Black: 0.4
     - _Radius: 15.7
     m_Colors: []
   m_BuildTextureStacks: []
