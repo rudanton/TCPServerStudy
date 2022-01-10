@@ -7,6 +7,8 @@ using UnityEngine.UI;
 using System;
 using System.IO;
 
+using JsonClass;
+
 public class Server : MonoBehaviour
 {
     public InputField PortInput;
@@ -16,13 +18,16 @@ public class Server : MonoBehaviour
 
     TcpListener server;
     bool serverStarted;
-
-
+    Dictionary<string, ServerClient> clientData;
+    List<string> clientList;
+    public delegate void DelgServer();
+    public event DelgServer serverOpen;
 	public void ServerCreate()
 	{
         clients = new List<ServerClient>();
         disconnectList = new List<ServerClient>();
-        
+        clientData = new Dictionary<string, ServerClient>();
+        clientList = new List<string>();
         try
         {
             int port = PortInput.text == "" ? 7777 : int.Parse(PortInput.text);
@@ -32,6 +37,7 @@ public class Server : MonoBehaviour
             StartListening();
             serverStarted = true;
             Chat.instance.ShowMessage($"서버가 {port}에서 시작되었습니다.");
+            serverOpen();
         }
         catch (Exception e) 
         {
@@ -75,9 +81,6 @@ public class Server : MonoBehaviour
                     {
                         OnIncomingData(c, data);
                     }
-
-
-
                 }
             }
         }
@@ -131,15 +134,31 @@ public class Server : MonoBehaviour
 
     void OnIncomingData(ServerClient c, string data)
     {
-        if(!data.Contains("position"))Debug.Log(data);
+        
         if (data.Contains("&NAME")) 
-        {
-            c.clientName = data.Split('|')[1];
-            Broadcast($"{c.clientName}이 연결되었습니다", clients);
+        {//처음 접속시.
+            UserInfo userInfo = JsonUtility.FromJson<UserInfo>(data.Split('|')[1]);
+            clientData.Add(userInfo.mem_id, c);
+            c.clientName = userInfo.mem_id;
+            Broadcast($"{c.clientName}@{userInfo.name}님이 연결되었습니다." , clients);
+            clientList.Add(userInfo.name);
             return;
         }
+        //제이슨 형식인가 확인.
+        if(!data.StartsWith("{") && !data.EndsWith("}")) Broadcast($"{clientData[c].name} : {data}", clients);
+        else 
+        {
+            //특정 인원 선택
+            if(data.Contains("CMD_pickOne"))
+            {
+                parametorParser param = JsonUtility.FromJson<parametorParser>(data);
+                
+                PickOne("", clientData[param.data]);
+                return;
+            }
 
-        Broadcast($"{c.clientName} : {data}", clients);
+            Broadcast(data, clients);
+        }
     }
 
     void Broadcast(string data, List<ServerClient> cl) 
@@ -156,6 +175,19 @@ public class Server : MonoBehaviour
             {
                 Chat.instance.ShowMessage($"쓰기 에러 : {e.Message}를 클라이언트에게 {c.clientName}");
             }
+        }
+    }
+    void PickOne(string data, ServerClient client)
+    {
+        try
+        {
+            StreamWriter writer = new StreamWriter(client.tcp.GetStream());
+            writer.WriteLine(data);
+                writer.Flush();
+        }
+        catch (Exception e)
+        {
+            Chat.instance.ShowMessage($"쓰기 에러 : {e.Message}를 {client}에게 보내지 못함");
         }
     }
 }

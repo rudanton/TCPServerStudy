@@ -73,3 +73,6 @@ crashlytics-build.properties
 
 # 
 [Bb]uild/
+*.7z
+*.zip
+*.zip
