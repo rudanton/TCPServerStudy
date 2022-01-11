@@ -27,8 +27,9 @@ public class Client : MonoBehaviour
 	[SerializeField] GameObject clientInfo;
 	public Server host;
 	bool amIhost = false;
-	const string CMD_transform = "Data:transform";
-	const string CMD_pickOne = "Data:memId";
+	bool InitList = false;
+	const string CMD_transform = CMD_Constant.CMD_transform;
+	const string CMD_pickOne = CMD_Constant.CMD_pickOne;
 	public void ConnectToServer()
 	{	//연결하는 함수.
 		// 이미 연결되었다면 함수 무시
@@ -39,6 +40,13 @@ public class Client : MonoBehaviour
 		string ip = IPInput.text == "" ? "192.168.0.138" : IPInput.text;
 		int port = PortInput.text == "" ? 7777 : int.Parse(PortInput.text);
 
+        clientName = NickInput.text == "" ? "Guest" + UnityEngine.Random.Range(1000, 10000) : NickInput.text;
+
+        myInfo = new UserInfo
+        {
+			name = clientName,			
+            mem_id = "Member" + UnityEngine.Random.Range(1000, 10000)
+        };
 		// 소켓 생성
 		try
 		{
@@ -47,6 +55,8 @@ public class Client : MonoBehaviour
 			writer = new StreamWriter(stream);
 			reader = new StreamReader(stream);
 			socketReady = true;
+
+			Application.runInBackground = true;
 		}
 		catch (Exception e) 
 		{
@@ -72,7 +82,6 @@ public class Client : MonoBehaviour
 		}
         if (amIhost)
         {
-
             float v = Input.GetAxis("Vertical");
             float h = Input.GetAxis("Horizontal");
             if (v != 0 || h != 0)
@@ -95,7 +104,6 @@ public class Client : MonoBehaviour
                     data = jData
                 };
 
-
                 Send(JsonUtility.ToJson(parser));
             }
         }
@@ -104,10 +112,82 @@ public class Client : MonoBehaviour
 	public GameObject capsule;
 	void OnIncomingData(string data)
 	{
-		
         if (data.StartsWith("{"))
-        {
-            parametorParser param = JsonUtility.FromJson<parametorParser>(data);
+        {//제이슨인가요?
+            jsonDataCame(JsonUtility.FromJson<parametorParser>(data));
+            return;
+		}
+		else if(data.EndsWith("연결되었습니다."))
+		{
+			string[] clientData = data.Split('@');
+			data = clientData[1];
+
+			string memId = clientData[0];
+			name = clientData[1].Replace("님이 연결되었습니다.", "");
+			makeClientList(name, memId);
+		}
+		if(data.StartsWith("UserList") && !amIhost)
+		{
+			if(InitList) return;
+			
+			string j = data.Split('/')[1];
+			UserInfoList userInfos = JsonUtility.FromJson<UserInfoList>(j);
+			for(int i = 0 ;i <userInfos.infoList.Length;i++)
+			{
+				makeClientList(userInfos.infoList[i]);
+			}
+			conDataCame();
+			return;
+		}
+		//초기 입장시
+		if (data == "%NAME") 
+		{
+			conDataCame();
+			return;
+		}
+		else if (data==CMD_pickOne)
+		{
+			Destroy(cube);
+			return;
+		}
+
+		Chat.instance.ShowMessage(data);
+	}
+    void makeClientList(string name, string memID)
+    {
+		Debug.Log($"name : {name}, memId : {memID}");
+        GameObject user = Instantiate(clientInfo, BackgroundCanvas.transform);
+
+        Toggle TGL_user = user.GetComponent<Toggle>();
+        TGL_user.isOn = false;
+        TGL_user.group = clientInfoList;
+        user.name = memID;
+        user.GetComponentInChildren<Text>().text = name;
+        TGL_user.interactable = amIhost;
+    }
+	void makeClientList(UserInfo userInfo)
+    {
+		Debug.Log($"UserInfo : {userInfo}");
+        GameObject user = Instantiate(clientInfo, BackgroundCanvas.transform);
+		
+        Toggle TGL_user = user.GetComponent<Toggle>();
+        TGL_user.isOn = false;
+        TGL_user.group = clientInfoList;
+        user.name = userInfo.mem_id;
+        user.GetComponentInChildren<Text>().text = userInfo.name;
+        TGL_user.interactable = amIhost;
+    }
+	void conDataCame()
+	{
+        if (InitList) return;
+        //Client 데이터 초기화.
+        string conData = JsonUtility.ToJson(myInfo);
+		Debug.Log(conData);
+        Send($"&NAME|{conData}");
+        InitList = true;
+	}
+	void jsonDataCame(parametorParser param)
+	{
 			string Str = param.data.Replace("\\", string.Empty);
             switch (param.type)
             {
@@ -121,46 +201,8 @@ public class Client : MonoBehaviour
                         break;
                     }
             }
-
-
-            return;
-		}
-		else if(data.EndsWith("연결되었습니다."))
-		{
-			string[] clientData = data.Split('@');
-			string memId = clientData[0];
-			data = clientData[1];
-			name = clientData[1].Replace("님이 연결되었습니다.", "");
-
-			GameObject user = Instantiate(clientInfo, BackgroundCanvas.transform);
-			
-			Toggle TGL_user = user.GetComponent<Toggle>();
-			TGL_user.isOn = false;
-			TGL_user.group = clientInfoList;
-			user.name = memId;
-			user.GetComponentInChildren<Text>().text = name;
-			TGL_user.interactable = amIhost;
-			
-			
-		}
-		if (data == "%NAME") 
-		{
-			//Client 데이터 초기화.
-			clientName = NickInput.text == "" ? "Guest" + UnityEngine.Random.Range(1000, 10000) : NickInput.text;
-			myInfo = new UserInfo
-			{
-				name = clientName,
-				mem_id = "Member" + UnityEngine.Random.Range(1000, 10000)
-			};
-			string conData = JsonUtility.ToJson(myInfo);
-			Send($"&NAME|{conData}");
-
-			return;
-		}
-
-		Chat.instance.ShowMessage(data);
 	}
-	void PickUser()
+	public void PickUser()
 	{
 		Toggle activated = clientInfoList.ActiveToggles().FirstOrDefault();
 		parametorParser param = new parametorParser
@@ -168,7 +210,9 @@ public class Client : MonoBehaviour
 			type = CMD_pickOne,
 			data = activated.name
 		};
-		Send(JsonUtility.ToJson(param));
+		string str = JsonUtility.ToJson(param);
+		Debug.Log(str);
+		Send(str);
 	}
 	void Send(string data)
 	{

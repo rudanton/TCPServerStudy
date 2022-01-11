@@ -15,18 +15,31 @@ public class Server : MonoBehaviour
 
     List<ServerClient> clients;
     List<ServerClient> disconnectList;
-
+    List<UserInfo> UserList;
     TcpListener server;
     bool serverStarted;
-    Dictionary<string, ServerClient> clientData;
+
+    // memId로 특정 클라이언트를 찾기 위함.
+    Dictionary<string, ServerClient> clientDic;
+    // 클라이언트의 정보를 알기 위함.
+    Dictionary<ServerClient, UserInfo> userInfoDic;
+    
     List<string> clientList;
+    
     public delegate void DelgServer();
     public event DelgServer serverOpen;
+
 	public void ServerCreate()
 	{
+        //포커스가 되지 않아도 돌아가도록.
+        Application.runInBackground = true;
+
         clients = new List<ServerClient>();
         disconnectList = new List<ServerClient>();
-        clientData = new Dictionary<string, ServerClient>();
+        userInfoDic = new Dictionary<ServerClient, UserInfo>();
+        UserList = new List<UserInfo>();
+
+        clientDic = new Dictionary<string, ServerClient>();
         clientList = new List<string>();
         try
         {
@@ -37,6 +50,7 @@ public class Server : MonoBehaviour
             StartListening();
             serverStarted = true;
             Chat.instance.ShowMessage($"서버가 {port}에서 시작되었습니다.");
+            
             serverOpen();
         }
         catch (Exception e) 
@@ -53,7 +67,12 @@ public class Server : MonoBehaviour
         }
         clients.Clear();
         disconnectList.Clear();
+        userInfoDic.Clear();
+        clientList.Clear();
+        clientDic.Clear();
+
         server.Stop();
+        
         serverStarted = false;
     }
 	void Update()
@@ -93,7 +112,12 @@ public class Server : MonoBehaviour
             disconnectList.RemoveAt(i);
 		}
 	}
-
+    private void OnDestroy() {
+        ServerRelease();
+    }
+    private void OnApplicationQuit() {
+        ServerRelease();
+    }
 	
 
 	bool IsConnected(TcpClient c)
@@ -124,9 +148,19 @@ public class Server : MonoBehaviour
     void AcceptTcpClient(IAsyncResult ar) 
     {
         TcpListener listener = (TcpListener)ar.AsyncState;
-        clients.Add(new ServerClient(listener.EndAcceptTcpClient(ar)));
-        StartListening();
+        ServerClient client = new ServerClient(listener.EndAcceptTcpClient(ar)); 
+        clients.Add(client);
 
+        if(UserList.Count != 0)
+        {
+            UserInfo[] infos = UserList.ToArray();
+            UserInfoList infoList = new UserInfoList { infoList = infos};
+            string j = JsonUtility.ToJson(infoList);
+            PickOne("UserList/"+j, client);
+        }
+
+        StartListening();
+        
         // 메시지를 연결된 모두에게 보냄
         Broadcast("%NAME", new List<ServerClient>() { clients[clients.Count - 1] });
     }
@@ -134,30 +168,36 @@ public class Server : MonoBehaviour
 
     void OnIncomingData(ServerClient c, string data)
     {
-        
         if (data.Contains("&NAME")) 
         {//처음 접속시.
             UserInfo userInfo = JsonUtility.FromJson<UserInfo>(data.Split('|')[1]);
-            clientData.Add(userInfo.mem_id, c);
+            UserList.Add(userInfo);
+            try
+            { userInfoDic.Add(c, userInfo);}
+            catch{}
+            clientDic.Add(userInfo.mem_id, c);
             c.clientName = userInfo.mem_id;
             Broadcast($"{c.clientName}@{userInfo.name}님이 연결되었습니다." , clients);
             clientList.Add(userInfo.name);
             return;
         }
         //제이슨 형식인가 확인.
-        if(!data.StartsWith("{") && !data.EndsWith("}")) Broadcast($"{clientData[c].name} : {data}", clients);
-        else 
+        if(data.StartsWith("{") && data.EndsWith("}")) 
         {
             //특정 인원 선택
-            if(data.Contains("CMD_pickOne"))
+            if(data.Contains("Data:memId"))
             {
                 parametorParser param = JsonUtility.FromJson<parametorParser>(data);
+                PickOne("Data:memId", clientDic[param.data]);
                 
-                PickOne("", clientData[param.data]);
                 return;
             }
-
             Broadcast(data, clients);
+        }
+        else 
+        {
+            Debug.Log(data);
+            Broadcast($"{userInfoDic[c].name} : {data}", clients);
         }
     }
 
@@ -183,7 +223,7 @@ public class Server : MonoBehaviour
         {
             StreamWriter writer = new StreamWriter(client.tcp.GetStream());
             writer.WriteLine(data);
-                writer.Flush();
+            writer.Flush();
         }
         catch (Exception e)
         {
