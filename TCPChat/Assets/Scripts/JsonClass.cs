@@ -16,6 +16,11 @@ namespace JsonClass
     {
         public string type;
         public string data;
+        public parametorParser(string TYPE, string DATA)
+        {
+            type = TYPE;
+            data = DATA;
+        }
     }
     [Serializable]
     public class UserInfoList
@@ -34,6 +39,12 @@ namespace JsonClass
         public Vector3 position;
         public Quaternion rotation;
         public Vector3 scale;
+        public tranformData(Transform t)
+        {
+            position = t.position;
+            rotation = t.rotation;
+            scale = t.localScale;
+        }
     }
     
      

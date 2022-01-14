@@ -13,6 +13,9 @@ public class Server : MonoBehaviour
 {
     public InputField PortInput;
 
+    public GameObject cube;
+    public Text ConnectedNum; 
+
     List<ServerClient> clients;
     List<ServerClient> disconnectList;
     List<UserInfo> UserList;
@@ -162,14 +165,28 @@ public class Server : MonoBehaviour
         StartListening();
         
         // 메시지를 연결된 모두에게 보냄
+        
         Broadcast("%NAME", new List<ServerClient>() { clients[clients.Count - 1] });
     }
 
+    void makeCube()
+    {
+        try{
 
+        Instantiate(cube);
+        }
+        catch (Exception e)
+        {
+            Debug.Log(e);
+        }
+    }
     void OnIncomingData(ServerClient c, string data)
     {
         if (data.Contains("&NAME")) 
         {//처음 접속시.
+                makeCube();
+
+            ConnectedNum.text = $"Clients : {clients.Count.ToString()}" ;
             UserInfo userInfo = JsonUtility.FromJson<UserInfo>(data.Split('|')[1]);
             UserList.Add(userInfo);
             try

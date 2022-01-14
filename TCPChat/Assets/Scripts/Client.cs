@@ -27,9 +27,40 @@ public class Client : MonoBehaviour
 	[SerializeField] GameObject clientInfo;
 	public Server host;
 	bool amIhost = false;
-	bool InitList = false;
+	bool isHaveList = false;
+	public GameObject cube;
+	public GameObject capsule;
 	const string CMD_transform = CMD_Constant.CMD_transform;
 	const string CMD_pickOne = CMD_Constant.CMD_pickOne;
+	
+	private void Awake() {
+		host.serverOpen += ()=> {amIhost = true; };
+	}
+	void Update()
+	{
+		if (socketReady && stream.DataAvailable) 
+		{
+			string data = reader.ReadLine();
+			if (data != null)
+				OnIncomingData(data);
+		}
+        if (amIhost)
+        {
+            float v = Input.GetAxis("Vertical");
+            float h = Input.GetAxis("Horizontal");
+            if (v != 0 || h != 0)
+            {
+                cube.transform.position += 5 * Time.deltaTime * (new Vector3(h, v, 0));
+                Transform form = cube.transform;
+                tranformData tData = new tranformData(form);
+                string jData = JsonUtility.ToJson(tData);
+                parametorParser parser = new parametorParser(CMD_transform, jData);
+
+                Send(JsonUtility.ToJson(parser));
+            }
+        }
+	}	
+
 	public void ConnectToServer()
 	{	//연결하는 함수.
 		// 이미 연결되었다면 함수 무시
@@ -37,10 +68,10 @@ public class Client : MonoBehaviour
 
 		// 기본 호스트/ 포트번호
 		// string ip = IPInput.text == "" ? "127.0.0.1" : IPInput.text;
-		string ip = IPInput.text == "" ? "192.168.0.138" : IPInput.text;
-		int port = PortInput.text == "" ? 7777 : int.Parse(PortInput.text);
+		string ip = string.IsNullOrWhiteSpace(IPInput.text) ? "192.168.0.138" : IPInput.text;
+		int port = string.IsNullOrWhiteSpace(PortInput.text) ? 7777 : int.Parse(PortInput.text);
 
-        clientName = NickInput.text == "" ? "Guest" + UnityEngine.Random.Range(1000, 10000) : NickInput.text;
+        clientName = string.IsNullOrWhiteSpace(NickInput.text) ? "Guest" + UnityEngine.Random.Range(1000, 10000) : NickInput.text;
 
         myInfo = new UserInfo
         {
@@ -69,47 +100,8 @@ public class Client : MonoBehaviour
 
 		CloseSocket();
 	}
-	private void Awake() {
-		host.serverOpen += ()=> {amIhost = true;};
-	}
-	void Update()
-	{
-		if (socketReady && stream.DataAvailable) 
-		{
-			string data = reader.ReadLine();
-			if (data != null)
-				OnIncomingData(data);
-		}
-        if (amIhost)
-        {
-            float v = Input.GetAxis("Vertical");
-            float h = Input.GetAxis("Horizontal");
-            if (v != 0 || h != 0)
-            {
-                cube.transform.position += 5 * Time.deltaTime * (new Vector3(h, v, 0));
-                Vector3 pos = cube.transform.position;
-                Quaternion rot = cube.transform.rotation;
-                Vector3 sc = cube.transform.localScale;
-                tranformData tData = new tranformData
-                {
-                    position = pos,
-                    rotation = rot,
-                    scale = sc
-                };
-
-                string jData = JsonUtility.ToJson(tData);
-                parametorParser parser = new parametorParser
-                {
-                    type = CMD_transform,
-                    data = jData
-                };
-
-                Send(JsonUtility.ToJson(parser));
-            }
-        }
-	}
-	public GameObject cube;
-	public GameObject capsule;
+	
+	
 	void OnIncomingData(string data)
 	{
         if (data.StartsWith("{"))
@@ -128,7 +120,7 @@ public class Client : MonoBehaviour
 		}
 		if(data.StartsWith("UserList") && !amIhost)
 		{
-			if(InitList) return;
+			if(isHaveList) return;
 			
 			string j = data.Split('/')[1];
 			UserInfoList userInfos = JsonUtility.FromJson<UserInfoList>(j);
@@ -179,12 +171,12 @@ public class Client : MonoBehaviour
     }
 	void conDataCame()
 	{
-        if (InitList) return;
+        if (isHaveList) return;
         //Client 데이터 초기화.
         string conData = JsonUtility.ToJson(myInfo);
 		Debug.Log(conData);
         Send($"&NAME|{conData}");
-        InitList = true;
+        isHaveList = true;
 	}
 	void jsonDataCame(parametorParser param)
 	{
@@ -205,11 +197,7 @@ public class Client : MonoBehaviour
 	public void PickUser()
 	{
 		Toggle activated = clientInfoList.ActiveToggles().FirstOrDefault();
-		parametorParser param = new parametorParser
-		{
-			type = CMD_pickOne,
-			data = activated.name
-		};
+		parametorParser param = new parametorParser(CMD_pickOne, activated.name);
 		string str = JsonUtility.ToJson(param);
 		Debug.Log(str);
 		Send(str);
